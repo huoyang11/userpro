@@ -25,9 +25,8 @@ struct task
 	int state;
 	int pid;
 	void *start_addr;
-	double user_time;
-	rbtree_node user_time_node;
 	rbtree_node pid_node;
+	queue_node ready_node;
 	queue_node end_node;
 	struct task_ctx ctx;
 	void (*start_routine)(void *);

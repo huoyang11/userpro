@@ -12,10 +12,11 @@ static struct
 {
 	struct task *current;
 	rbtree pid_set;
-	rbtree user_time_set;
 	queue task_end;
+	queue task_ready;
 	struct timer_struct time_run;
 	pthread_mutex_t mutex;
+	pthread_t pid;
 }task_context;
 
 static int find_cmp(void *arg,int size)
@@ -43,21 +44,6 @@ static int pid_cmp(rbtree_node *p1,rbtree_node *p2)
 		return 1;
 	}
 	else if(t1->pid < t2->pid){
-		return -1;
-	}
-
-	return 0;
-}
-
-static int user_time_cmp(rbtree_node *p1,rbtree_node *p2)
-{
-	struct task *t1 = GET_STRUCT_START_ADDR(struct task, user_time_node, p1);
-	struct task *t2 = GET_STRUCT_START_ADDR(struct task, user_time_node, p2);
-
-	if(t1->user_time > t2->user_time) {
-		return 1;
-	}
-	else if(t1->user_time < t2->user_time){
 		return -1;
 	}
 
@@ -116,7 +102,7 @@ static void send_message(void *arg)
 
 	pthread_mutex_lock(&task_context.mutex);
 	
-	while(task_context.task_end.length != 0){
+	while(!queue_isempty(&task_context.task_end)){
 		struct queue_node *p;
 		queue_pop(&task_context.task_end, &p);
 		struct task *pt = GET_STRUCT_START_ADDR(struct task, end_node, p);
@@ -134,26 +120,6 @@ static void *thread_callback(void *arg)
 	run_timer(&task_context.time_run);
 }
 
-int for_each(rbtree *root,rbtree_node *node)
-{
-    if(node == NULL || root == NULL) return -1;
-    if(node == root->nil || root->root == root->nil) return 0;
-
-    for_each(root,node->left);
-	
-    struct task *stu = GET_STRUCT_START_ADDR(struct task,user_time_node,node);
-	
-    if(stu->user_time_node.color == BLACK) {
-		printf("time:%f  pid:%d BLACK\n",stu->user_time,stu->pid);
-    }else{
-    	printf("time:%f  pid:%d RED\n",stu->user_time,stu->pid);
-    }
-
-    for_each(root,node->right);
-
-    return 0;
-}
-
 static void sigusr_schedul(int signum)
 {
 	if(signum != SIGUSR1){
@@ -161,27 +127,12 @@ static void sigusr_schedul(int signum)
 	}
 
 	if(task_context.current != NULL){
-		rbtree_delete(&task_context.user_time_set, &task_context.current->user_time_node);
-#if 0
-		task_context.current->user_time += TASK_TIME;
-		rbtree_insert(&task_context.user_time_set, &task_context.current->user_time_node);
-		for_each(&task_context.user_time_set,task_context.user_time_set.root);
-#else
-		task_context.current->user_time += TASK_TIME;
-
-		if(task_context.current->user_time >= 400.0){
-			//printf("timeout\n");
-			task_context.current->user_time = 0.0;
-		}
-
-		rbtree_insert(&task_context.user_time_set, &task_context.current->user_time_node);
-
-		for_each(&task_context.user_time_set,task_context.user_time_set.root);
-#endif
+		queue_push(&task_context.task_ready, &task_context.current->ready_node);
 	}
 
-	rbtree_node *rp = rbtree_min(&task_context.user_time_set, task_context.user_time_set.root);
-	struct task *p = GET_STRUCT_START_ADDR(struct task, user_time_node, rp);
+	struct queue_node *rp = NULL;
+	queue_pop(&task_context.task_ready, &rp);
+	struct task *p = GET_STRUCT_START_ADDR(struct task, ready_node, rp);
 
 	if(p == task_context.current){
 		cancel_signel();
@@ -217,12 +168,11 @@ void task_exit()
 	shield_signel(SIGUSR1);
 	struct task *current = task_context.current;
 	current->state = TASK_END;
-	printf("delete %d\n",current->pid);
+	
 	pthread_mutex_lock(&task_context.mutex);
 	queue_push(&task_context.task_end, &current->end_node);
 	pthread_mutex_unlock(&task_context.mutex);
 	
-	rbtree_delete(&task_context.user_time_set, &current->user_time_node);
 	rbtree_delete(&task_context.pid_set, &current->pid_node);
 	task_context.current = NULL;
 	cancel_signel();
@@ -242,16 +192,14 @@ int task_init()
 
 	p->pid = 0;
 	p->state = TASK_RUN;
-	p->user_time = 0;
 
 	task_context.current = p;
 
 	rbtree_init(&task_context.pid_set, pid_cmp);
-	rbtree_init(&task_context.user_time_set, user_time_cmp);
+	queue_init(&task_context.task_ready);
 	queue_init(&task_context.task_end);
 
 	rbtree_insert(&task_context.pid_set, &p->pid_node);
-	rbtree_insert(&task_context.user_time_set, &p->user_time_node);
 
 	//设置信号
 	signal(SIGUSR1,sigusr_schedul);
@@ -260,8 +208,7 @@ int task_init()
 	init_timer(&task_context.time_run, TIME_CYCLE);
 	add_timer(&task_context.time_run, TASK_TIME, send_message, NULL);
 
-	pthread_t pid;
-	pthread_create(&pid,NULL,thread_callback,NULL);
+	pthread_create(&task_context.pid,NULL,thread_callback,NULL);
 
 	return 0;
 }
@@ -300,10 +247,10 @@ int task_create(void (*start_routine)(void *),void *arg)
 	p->ctx.ebp = p->ctx.esp;
 
 	shield_signel(SIGUSR1);
+	
 	rbtree_insert(&task_context.pid_set, &p->pid_node);
-	while(rbtree_insert(&task_context.user_time_set, &p->user_time_node) != 0){
-		p->user_time += 0.0001;
-	}
+	queue_push(&task_context.task_ready, &p->ready_node);
+	
 	cancel_signel();
 	
 	return 0;
@@ -314,8 +261,11 @@ int task_kill(int pid)
 	shield_signel(SIGUSR1);
 
 	rbtree_node *pnode = rbtree_find(&task_context.pid_set, find_cmp, &pid,sizeof(int));
+	if(pnode == NULL){
+		return -1;
+	}
 	struct task *p = GET_STRUCT_START_ADDR(struct task, pid_node, pnode);
-
+	
 	p->ctx.eip = (unsigned long)task_exit;
 	p->ctx.esp = p->ctx.ebp;
 
@@ -332,5 +282,62 @@ int task_kill(int pid)
 
 int task_uninit()
 {
+	shield_signel(SIGUSR1);
+	stop_timer(&task_context.time_run);
+	pthread_join(task_context.pid,NULL);
+	uninit_timer(&task_context.time_run);
 	
+	rbtree_destroy(&task_context.pid_set);
+
+	int isfree = 0;
+	if(task_context.current != NULL){
+		struct task *current = task_context.current;
+		printf("pid:%d\n",current->pid);
+		if(current->pid != 0){
+			free(current->start_addr);
+			free(current);
+		}else{
+			isfree = 1;
+			free(current);
+		}	
+	}
+
+	while(!queue_isempty(&task_context.task_end)){
+		struct queue_node *p;
+		queue_pop(&task_context.task_end, &p);
+		struct task *pt = GET_STRUCT_START_ADDR(struct task, end_node, p);
+		printf("pid:%d\n",pt->pid);
+		if(pt->pid != 0){
+			free(pt->start_addr);
+			free(pt);
+		}else{
+			if(!isfree){
+				isfree = 1;
+				free(pt);
+			}
+		}		
+	}
+
+	while(!queue_isempty(&task_context.task_ready)){
+		struct queue_node *p;
+		queue_pop(&task_context.task_ready, &p);
+		struct task *pt = GET_STRUCT_START_ADDR(struct task, ready_node, p);
+		printf("pid:%d\n",pt->pid);
+		if(pt->pid != 0){
+			free(pt->start_addr);
+			free(pt);
+		}else{
+			if(!isfree){
+				isfree = 1;
+				free(pt);
+			}
+		}
+	}
+
+	queue_uninit(&task_context.task_ready);
+	queue_uninit(&task_context.task_end);
+
+	cancel_signel();
+
+	return 0;
 }

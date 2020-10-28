@@ -39,35 +39,22 @@ int init_listen(short port)
 
 void task_callback(void *arg)
 {
-	while(1){
-		printf("aaaa\n");
-		for(int i = 0;i < 10000000;i++);
-	}
-
 	int cfd = *((int *)arg);
 	char buf[512] = {0};
 	
 	while(1){
-		//int len = recv(cfd,buf,sizeof(buf),0);
-		printf("cfd = %d\n",cfd);
-		//fwrite(buf,1,len,stdout);
-	}
-}
-
-void task_callback2(void *arg)
-{
-	while(1){
-		printf("bbb\n");
-		for(int i = 0;i < 10000000;i++);
+		int len = recv(cfd,buf,sizeof(buf),0);
+		printf("recv>%d:",cfd);
+		fwrite(buf,1,len,stdout);
 	}
 }
 
 int main(int argc,char *argv[])
 {
-#if 0
+
 	int sfd = init_listen(9998);
 	if(sfd < 0){
-		perror("error");
+		perror("init_listen error");
 		return -1;
 	}
 	
@@ -81,15 +68,5 @@ int main(int argc,char *argv[])
 		}
 		task_create(task_callback,&cfd);
 	}
-#endif
-
-	task_create(task_callback,NULL);
-	task_create(task_callback2,NULL);
-
-	while(1){
-		printf("main\n");
-		for(int i = 0;i < 10000000;i++);
-	}
-
 	return 0;
 }

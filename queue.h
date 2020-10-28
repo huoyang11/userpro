@@ -18,6 +18,7 @@ typedef struct queue
 
 int queue_init(struct queue *q);
 int queue_push(struct queue *q ,struct queue_node *n);
+int queue_isempty(struct queue *q);
 int queue_pop(struct queue *q ,struct queue_node **n);
 int queue_uninit(struct queue *q);
 

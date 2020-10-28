@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/epoll.h>
 
 #include "timer.h"
@@ -55,7 +56,7 @@ int run_timer(struct timer_struct *p)
 		
 		current_node = p->timer_queue.head;
 		current = GET_STRUCT_START_ADDR(struct timer_data, qnode, current_node);
-		if(p->timer_queue.length == 0){
+		if(queue_isempty(&p->timer_queue)){
 			continue;
 		}
 		
@@ -89,5 +90,18 @@ int stop_timer(struct timer_struct *p)
 
 int uninit_timer(struct timer_struct *p)
 {
+	if(p == NULL){
+		return -1;
+	}
+
+	close(p->epfd);
+	p->isstop = 1;
+
+	while(!queue_isempty(&p->timer_queue)){
+		queue_pop(&p->timer_queue, NULL);
+	}
+	
+	queue_uninit(&p->timer_queue);
+
 	return 0;
 }

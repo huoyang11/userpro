@@ -34,20 +34,37 @@ int queue_push(struct queue *q ,struct queue_node *n)
 	return 0;
 }
 
-int queue_pop(struct queue *q ,struct queue_node **n)
+int queue_isempty(struct queue *q)
 {
-	if(q == NULL || n == NULL){
+	if(q == NULL){
 		return -1;
 	}
 
 	if(q->length == 0){
-		*n = NULL;
+		return 1;
+	}
+
+	return 0;
+}
+
+int queue_pop(struct queue *q ,struct queue_node **n)
+{
+	if(q == NULL){
+		return -1;
+	}
+
+	if(q->length == 0){
+		if(n != NULL){
+			*n = NULL;
+		}
 		return -2;
 	}
 
-	*n = q->last;
-	q->last = q->last->prev;
+	if(n != NULL){
+		*n = q->last;
+	}
 	
+	q->last = q->last->prev;
 	q->length--;
 
 	return 0;

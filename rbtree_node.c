@@ -330,6 +330,7 @@ int rbtree_destroy(rbtree *root)
 {
 	if(root == NULL) return -1;
 
+	root->cmp = NULL;
 	free(root->nil);
 	root->nil = NULL;
 
