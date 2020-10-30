@@ -101,11 +101,12 @@ static void send_message(void *arg)
 	kill(getpid(),SIGUSR1);
 
 	pthread_mutex_lock(&task_context.mutex);
-	
+	//回收协程空间
 	while(!queue_isempty(&task_context.task_end)){
 		struct queue_node *p;
 		queue_pop(&task_context.task_end, &p);
 		struct task *pt = GET_STRUCT_START_ADDR(struct task, end_node, p);
+		//printf("free pid:%d\n",pt->pid);
 		free(pt->start_addr);
 		free(pt);
 	}

@@ -44,6 +44,10 @@ void task_callback(void *arg)
 	
 	while(1){
 		int len = recv(cfd,buf,sizeof(buf),0);
+		if(len == 0){
+			close(cfd);
+			break;
+		}
 		printf("recv>%d:",cfd);
 		fwrite(buf,1,len,stdout);
 	}
@@ -51,10 +55,8 @@ void task_callback(void *arg)
 
 int main(int argc,char *argv[])
 {
-
 	int sfd = init_listen(9998);
 	if(sfd < 0){
-		perror("init_listen error");
 		return -1;
 	}
 	
@@ -66,6 +68,7 @@ int main(int argc,char *argv[])
 		if(cfd != -1){
 			printf("accept %d\n",cfd);
 		}
+		//创建协程
 		task_create(task_callback,&cfd);
 	}
 	return 0;
